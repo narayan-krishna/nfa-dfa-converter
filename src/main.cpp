@@ -147,7 +147,7 @@ class DFA {
         void powerset_dfs(const vector<int>& nums, vector<int> &curr_subset, 
                        vector<vector<int>>& subsets, int pos, int contains_start);
         void generate_transitions_from_powerset(const NFA &nfa);
-        void epsilon_check(int state, dfa_state& states, const NFA &nfa);
+        void epsilon_check(int state, dfa_state& states, const NFA &nfa, int init);
 
     public:
         DFA(const NFA &nfa);
@@ -188,20 +188,6 @@ void DFA::powerset_dfs(const vector<int>& nums, vector<int> &curr_subset,
 void DFA::generate_powerset(const vector<int>& nums) {
     vector<int> init_subset;
     powerset_dfs(nums, init_subset, powerset, 0, 0);
-
-    for(auto vec : powerset) {
-        for(int i : vec) {
-            cout << i << " ";
-        } cout << endl;
-    }
-
-    cout << "accept" << endl;
-    for(auto states : accept_states) {
-        cout << "{";
-        for(int i : states) {
-            cout << i << " ";
-        } cout << "}" << endl;
-    }
 }
 
 void DFA::generate_transitions_from_powerset(const NFA &nfa) {
@@ -238,7 +224,7 @@ void DFA::generate_transitions_from_powerset(const NFA &nfa) {
 
                     for(auto state : symbol_mapping.second) { //for states associated with char
                         symbol_check->second.insert(state); //push back states to their corresponding letter
-                        epsilon_check(state, symbol_check->second, nfa);
+                        epsilon_check(state, symbol_check->second, nfa, 1);
                     }
                 }
             } 
@@ -248,21 +234,12 @@ void DFA::generate_transitions_from_powerset(const NFA &nfa) {
 
         // unordered_set<int> removed_dups(copied_set.begin(), copied_set.end());
         transitions.push_back({set, final});
-        cout << "\n(";
-        for (auto i : copied_set) {
-            cout << " " << i;
-        } cout << " )" << endl;
-
-        for(auto i : final) {
-            cout << i.first << "=>";
-            for(auto j : i.second) {
-                cout << j << ",";
-            } cout << endl;
-        }
     }
 }
 
-void DFA::epsilon_check(int state, dfa_state& states, const NFA &nfa) {
+void DFA::epsilon_check(int state, dfa_state& states, const NFA &nfa, int init) {
+    if (states.find(state) != states.end() && init == 0) return;
+
     auto transition_iter = nfa.transitions.find(state);
     auto epsilon_associations = transition_iter->second.find('-');
 
@@ -270,8 +247,8 @@ void DFA::epsilon_check(int state, dfa_state& states, const NFA &nfa) {
 
     for(auto i : epsilon_associations->second) {
         states.insert(i);
+        epsilon_check(i, states, nfa, 0);
     }
-    //need to recursively epsilon check here
 }
 
 const void DFA::print_to_file(string file_name) {
