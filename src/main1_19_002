@@ -138,14 +138,13 @@ class DFA {
     private:
         vector<dfa_state> states;
         vector<char> alphabet;
-        int start_state;
+        vector<int> start_state;
         vector<dfa_state> accept_states;
-        vector<pair<vector<int>, unordered_map<char, dfa_state>>> transitions;
-        vector<vector<int>> powerset;
+        vector<pair<dfa_state, unordered_map<char, dfa_state>>> transitions;
+        vector<dfa_state> powerset;
 
-        void generate_powerset(const vector<int>& nums);
-        void powerset_dfs(const vector<int>& nums, vector<int> &curr_subset, 
-                       vector<vector<int>>& subsets, int pos, int contains_start);
+        void generate_powerset(const vector<int>& states, 
+                               vector<unordered_set<int>>& powerset);
         void generate_transitions_from_powerset(const NFA &nfa);
         void epsilon_check(int state, dfa_state& states, const NFA &nfa);
 
@@ -155,65 +154,43 @@ class DFA {
 };
 
 DFA::DFA(const NFA &nfa) {
-    start_state = nfa.start_state;
+    start_state = vector<int>{nfa.start_state};
     alphabet = nfa.alphabet; 
-    generate_powerset(nfa.states);
+    generate_powerset(nfa.states, powerset);
     generate_transitions_from_powerset(nfa);
 }
 
-void DFA::powerset_dfs(const vector<int>& nums, vector<int> &curr_subset, 
-                       vector<vector<int>>& subsets, int pos, int contains_start) {
-    if (contains_start) {
-        dfa_state accept(curr_subset.begin(), curr_subset.end());
-        accept_states.push_back(accept);
+void DFA::generate_powerset(const vector<int>& states, vector<unordered_set<int>>& powerset) {
+    for(int i = 0; i < states.size(); i++) {
+        dfa_state single_set;
+        for(int j = i; j < states.size(); j ++) {
+            single_set.insert(states[j]);
+            // print_vec(single_set); 
+            dfa_state copied(single_set);
+            powerset.push_back(copied);
+        }
     }
-
-    if (pos >= nums.size()) {
-        vector<int> copy(curr_subset);
-        subsets.push_back(copy); 
-        return;
-    }
-    
-    vector<int> included(curr_subset);
-    included.push_back(nums[pos]);
-    // int contains = 0;
-    // if (nums[pos] == start_state) contains = 1;
-    powerset_dfs(nums, included, subsets, pos + 1, 
-                 nums[pos] == start_state ? 1 : contains_start);
-        
-    vector<int> non_included(curr_subset);
-    powerset_dfs(nums, non_included, subsets, pos + 1, 0);
-} 
-    
-void DFA::generate_powerset(const vector<int>& nums) {
-    vector<int> init_subset;
-    powerset_dfs(nums, init_subset, powerset, 0, 0);
 
     for(auto vec : powerset) {
         for(int i : vec) {
             cout << i << " ";
         } cout << endl;
     }
-
-    cout << "accept" << endl;
-    for(auto states : accept_states) {
-        cout << "{";
-        for(int i : states) {
-            cout << i << " ";
-        } cout << "}" << endl;
-    }
 }
 
 void DFA::generate_transitions_from_powerset(const NFA &nfa) {
     for (auto set : powerset) {
-        vector<int> copied_set(set);
+        unordered_set<int> copied_set(set.begin(), set.end());
         unordered_map<char, dfa_state> final; // {}, x => {}
         int original_set_size = set.size(); 
-        unordered_set<int> states_checked;
+        // unordered_set<int> states_checked;
 
-        for (int i = 0; i < copied_set.size(); i++) {
-            if (states_checked.find(copied_set[i]) != end(states_checked)) continue;
-            auto nfa_transition_state = nfa.transitions.find(copied_set[i]); //find each state within transition map of nfa
+        for (auto copied_state : copied_set) {
+            // if (states_checked.find(copied_state) != end(states_checked)) continue;
+            auto nfa_transition_state = nfa.transitions.find(copied_state); //find each state within transition map of nfa
+
+            //nfa:
+            //unordered_map<int, unordered_map<char, vector<int>>> transitions;
 
             //error control
             if (nfa_transition_state == end(nfa.transitions)) {
@@ -226,7 +203,7 @@ void DFA::generate_transitions_from_powerset(const NFA &nfa) {
                 char character_mapped = symbol_mapping.first;
                 if (character_mapped == '-') {
                     for(auto state : symbol_mapping.second) {
-                        copied_set.push_back(state);
+                        copied_set.insert(state);
                     }
                 } else {
                     auto symbol_check = final.find(character_mapped); //is the symbol from nfa in dfa
@@ -239,16 +216,25 @@ void DFA::generate_transitions_from_powerset(const NFA &nfa) {
                     for(auto state : symbol_mapping.second) { //for states associated with char
                         symbol_check->second.insert(state); //push back states to their corresponding letter
                         epsilon_check(state, symbol_check->second, nfa);
+                        // cout << state << endl;
+                        // if (set.find(state) != set.end()) {
+                        //     symbol_check->second.insert(copied_state);
+                        // }
+                        // if (i >= original_set_size) { //was this found through an epsilon closure?
+                        // }
                     }
                 }
             } 
 
-            states_checked.insert(copied_set[i]);
+            // states_checked.insert(copied_state);
         }
 
-        // unordered_set<int> removed_dups(copied_set.begin(), copied_set.end());
-        transitions.push_back({set, final});
+        transitions.push_back({copied_set, final});
         cout << "\n(";
+        for (auto i : set) {
+            cout << " " << i;
+        } cout << " )" << endl;
+        cout << "(";
         for (auto i : copied_set) {
             cout << " " << i;
         } cout << " )" << endl;
@@ -279,23 +265,16 @@ const void DFA::print_to_file(string file_name) {
     outfile.open (file_name + ".dfa");
 
     //list of states
-    string state_list = "";
     for (auto state : powerset) {
-        if (state.size() > 0) {
-            string power_rep = "{";
-            for (auto members : state) {
-                // cout << members << endl;
-                if (state.size() > 0) { 
-                    power_rep += '0' + members;
-                    power_rep += ',';
-                } 
-            }
-            power_rep[power_rep.size() - 1] = '}';
-            state_list += power_rep + " ";
+        string power_rep = "{";
+        for (auto members : state) {
+            // cout << members << endl;
+            power_rep += '0' + members;
+            power_rep += ',';
         }
-    }
-    outfile << state_list + "{EM}" << endl;
-    
+        power_rep[power_rep.size() - 1] = '}';
+        outfile << power_rep << " ";
+    } outfile << endl;
 
     //list of symbols
     for (auto symbol : alphabet) {
@@ -303,23 +282,10 @@ const void DFA::print_to_file(string file_name) {
     } outfile << endl;
 
     //start state
-    outfile << "{" << start_state << + "}" << endl;
+    outfile << "start states here" << endl;
 
     //valid accept states
-    string accept_state_list = "";
-    for (auto states : accept_states) {
-        if (states.size() > 0) {
-            string power_rep = "{";
-            for (int i : states) {
-                // cout << members << endl;
-                power_rep += '0' + i;
-                power_rep += ',';
-            }
-            power_rep[power_rep.size() - 1] = '}';
-            accept_state_list += power_rep + " ";
-        }
-    }
-    outfile << accept_state_list << endl;
+    outfile << "accept stats here" << endl;
 
     // transition function
     for (auto transition : transitions) {
@@ -362,6 +328,7 @@ int main (int argc, char **argv) {
     // set_test();
 
     NFA my_NFA = NFA(argv[1]);
+    my_NFA.print_out();
     DFA my_DFA = DFA(my_NFA);
     my_DFA.print_to_file("first_dfa");
 

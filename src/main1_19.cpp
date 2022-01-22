@@ -12,11 +12,11 @@ class NFA {
         vector<int> states;
         vector<char> alphabet;
         int start_state;
-        vector<int> accept_states;
+        vector<int> accept_states; //these needs to separate based on commas
         unordered_map<int, unordered_map<char, vector<int>>> transitions;
 
         NFA(const string filename);
-        void print_out();
+        const void print_out();
 
     private:
         inline void parse_states(const string line);
@@ -106,7 +106,7 @@ inline void NFA::parse_transition(const string line) {
     }
 }
 
-void NFA::print_out() {
+const void NFA::print_out() {
     for(auto i : states) {
         cout << i << " ";
     } cout << endl;
@@ -132,9 +132,9 @@ void NFA::print_out() {
     }
 }
 
-typedef unordered_set<int> dfa_state;
-
 class DFA {
+    typedef unordered_set<int> dfa_state;
+
     private:
         vector<dfa_state> states;
         vector<char> alphabet;
@@ -150,6 +150,7 @@ class DFA {
 
     public:
         DFA(const NFA &nfa);
+        const void print_to_file(string file_name);
 };
 
 DFA::DFA(const NFA &nfa) {
@@ -225,7 +226,7 @@ void DFA::generate_transitions_from_powerset(const NFA &nfa) {
 
         transitions.push_back({set, final});
         cout << "\n(";
-        for (auto i : set) {
+        for (auto i : copied_set) {
             cout << " " << i;
         } cout << " )" << endl;
 
@@ -247,6 +248,65 @@ void DFA::epsilon_check(int state, dfa_state& states, const NFA &nfa) {
     for(auto i : epsilon_associations->second) {
         states.insert(i);
     }
+    //need to recursively epsilon check here
+}
+
+const void DFA::print_to_file(string file_name) {
+    ofstream outfile;
+    outfile.open (file_name + ".dfa");
+
+    //list of states
+    for (auto state : powerset) {
+        string power_rep = "{";
+        for (auto members : state) {
+            // cout << members << endl;
+            power_rep += '0' + members;
+            power_rep += ',';
+        }
+        power_rep[power_rep.size() - 1] = '}';
+        outfile << power_rep << " ";
+    } outfile << endl;
+
+    //list of symbols
+    for (auto symbol : alphabet) {
+        outfile << symbol << '\t';
+    } outfile << endl;
+
+    //start state
+    outfile << "start states here" << endl;
+
+    //valid accept states
+    outfile << "accept stats here" << endl;
+
+    // transition function
+    for (auto transition : transitions) {
+        string transition_rep = "{";
+        for (auto states : transition.first) {
+            transition_rep += '0' + states;
+            transition_rep += ',';
+        }
+        transition_rep[transition_rep.size() - 1] = '}';
+        transition_rep += ", ";
+        for (auto map : transition.second) {
+            string final_rep = transition_rep;
+            if (map.first == '-') {
+                final_rep += "EPS";
+            } else {
+                final_rep += map.first;
+            }
+
+            final_rep += " = {";
+            for (auto state : map.second) {
+                final_rep += '0' + state;
+                final_rep += ',';
+            }
+            final_rep[final_rep.size() - 1] = '}';
+            outfile << final_rep << " ";
+            outfile << endl;
+        }
+    }
+
+    outfile.close();
 }
 
 int main (int argc, char **argv) {
@@ -261,6 +321,7 @@ int main (int argc, char **argv) {
     NFA my_NFA = NFA(argv[1]);
     my_NFA.print_out();
     DFA my_DFA = DFA(my_NFA);
+    my_DFA.print_to_file("first_dfa");
 
     return 0;
 }
