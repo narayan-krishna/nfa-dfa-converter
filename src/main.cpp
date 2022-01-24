@@ -228,6 +228,7 @@ void DFA::generate_transitions (dfa_state process_state, vector<dfa_state> explo
     transitions.push_back({set, process_state_mappings});
     explored_states.push_back(set);
     states.push_back(set);
+
     if (set.find(nfa_start_state) != set.end()) accept_states.push_back(set);
 
     for (auto mapping : process_state_mappings) {
@@ -259,17 +260,16 @@ const void DFA::print_to_file(string file_name) {
         if (state.size() > 0) {
             string power_rep = "{";
             for (auto members : state) {
-                // cout << members << endl;
-                if (state.size() > 0) { 
-                    power_rep += '0' + members;
-                    power_rep += ',';
-                } 
+                power_rep += '0' + members;
+                power_rep += ',';
             }
             power_rep[power_rep.size() - 1] = '}';
             state_list += power_rep + " ";
+        } else {
+            state_list += "{EM} ";
         }
     }
-    outfile << state_list + "{EM}" << endl;
+    outfile << state_list << endl;
     
 
     //list of symbols
