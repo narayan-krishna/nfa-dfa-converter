@@ -183,43 +183,31 @@ void DFA::generate_transitions (dfa_state process_state, vector<dfa_state> explo
     vector<int> dfa_state_vector(process_state.begin(), process_state.end());
     unordered_map<char, dfa_state> process_state_mappings;
     unordered_set<int> states_checked;
-
-    //equip map with all possible mappings for each character
-    for (char alpha : alphabet) {
-        dfa_state state;
-        process_state_mappings.insert({alpha, state});
-    }
-
-    //check for epsilon states on each of the states in vector, add
-    //epsilon states back on
-    for (int i = 0; i < dfa_state_vector.size(); i ++) {
-        auto nfa_iter = nfa.transitions.find(dfa_state_vector[i]);
-        auto char_iter = nfa_iter->second.find('-');
-        if (char_iter != nfa_iter->second.end()) {
-            for(auto state : char_iter->second) {
-                dfa_state_vector.push_back(state);
-            }
-        }
-    }
-
-    //go through the character mappings for each state
-    //add all their corresponding states to map, espilon check them
     for (int i = 0; i < dfa_state_vector.size(); i ++) {
 
         if (states_checked.find(dfa_state_vector[i]) != end(states_checked)) continue;
         auto nfa_iter = nfa.transitions.find(dfa_state_vector[i]);
 
-        for (char alpha : alphabet) {
-            auto char_iter = nfa_iter->second.find(alpha);
-            auto mapping_check = process_state_mappings.find(alpha);
+        for(auto symbol_mapping : nfa_iter->second) { //every symbol mapping
+            char character_mapped = symbol_mapping.first;
+            if (character_mapped == '-') {
+                for(auto state : symbol_mapping.second) {
+                    dfa_state_vector.push_back(state);
+                }
+            } else {
+                auto symbol_check = process_state_mappings.find(character_mapped); //is the symbol from nfa in dfa
+                if(symbol_check == end(process_state_mappings)) { //if we've encountered before, push the state to corresponding vec
+                    dfa_state state;
+                    process_state_mappings.insert({character_mapped, state});
+                    symbol_check = process_state_mappings.find(character_mapped); //so we can use this iterator for later
+                }
 
-            if (char_iter != nfa_iter->second.end()) {
-                for(auto state : char_iter->second) { //for states associated with char
-                    mapping_check->second.insert(state); //push back states to their corresponding letter
-                    epsilon_check(state, mapping_check->second, nfa, 1);
+                for(auto state : symbol_mapping.second) { //for states associated with char
+                    symbol_check->second.insert(state); //push back states to their corresponding letter
+                    epsilon_check(state, symbol_check->second, nfa, 1);
                 }
             }
-        }
+        } 
 
         states_checked.insert(dfa_state_vector[i]);
     } 
@@ -233,6 +221,7 @@ void DFA::generate_transitions (dfa_state process_state, vector<dfa_state> explo
     for (auto mapping : process_state_mappings) {
         generate_transitions(mapping.second, explored_states, nfa);
     }
+    //copy back to a set
 }
 
 void DFA::epsilon_check(int state, dfa_state& states, const NFA &nfa, int init) {
@@ -307,32 +296,26 @@ const void DFA::print_to_file(string file_name) {
     // transition function
     for (auto transition : transitions) {
         string transition_rep = "{";
-        if (transition.first.size() > 0) {
-            for (auto states : transition.first) {
-                transition_rep += '0' + states;
-                transition_rep += ',';
-            }
-            transition_rep[transition_rep.size() - 1] = '}';
-        } else {
-            transition_rep += "EM";
-            transition_rep += '}';
+        for (auto states : transition.first) {
+            transition_rep += '0' + states;
+            transition_rep += ',';
         }
+        transition_rep[transition_rep.size() - 1] = '}';
         transition_rep += ", ";
         for (auto map : transition.second) {
             string final_rep = transition_rep;
-            final_rep += map.first;
+            if (map.first == '-') {
+                final_rep += "EPS";
+            } else {
+                final_rep += map.first;
+            }
 
             final_rep += " = {";
-            if (map.second.size() > 0) {
-                for (auto state : map.second) {
-                    final_rep += '0' + state;
-                    final_rep += ',';
-                }
-                final_rep[final_rep.size() - 1] = '}';
-            } else {
-                final_rep += "EM";
-                final_rep += '}';
+            for (auto state : map.second) {
+                final_rep += '0' + state;
+                final_rep += ',';
             }
+            final_rep[final_rep.size() - 1] = '}';
             outfile << final_rep << " ";
             outfile << endl;
         }
