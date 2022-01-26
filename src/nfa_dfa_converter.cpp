@@ -7,18 +7,24 @@
 
 using namespace std;
 
+//nfa class (5-tuple) ---------------------------------------
 class NFA {
     public:
+        //member variables are representative of elements of 5-tuple
+        //5-tuple (nfa states, alphabet, start state, accept states, transitions)
         vector<int> states;
         vector<char> alphabet;
         int start_state;
         vector<int> accept_states; //these needs to separate based on commas
         unordered_map<int, unordered_map<char, vector<int>>> transitions;
 
+        //create an NFA from a file
         NFA(const string filename);
-        const void print_out();
+        //print out NFA info (mainly for testing)
+        void print_out() const;
 
     private:
+        //inline functions to process a file into a dfa
         inline void parse_states(const string line);
         inline void parse_alphabet(const string line);
         inline void get_start_state(const string line);
@@ -26,6 +32,7 @@ class NFA {
         inline void parse_transition(const string line);
 };
 
+//given an nfa file, parse for nfa 5-tuple
 NFA::NFA(const string filename) {
     ifstream parse{ filename };
     string current; int line_number = 0;
@@ -65,6 +72,7 @@ inline void NFA::parse_valid_accept_states(const string line) {
     }
 }
 
+//check for epsilons in the line
 inline void NFA::parse_transition(const string line) {
     int init_state = line[1] - '0';
     // cout << line << endl;
@@ -72,22 +80,16 @@ inline void NFA::parse_transition(const string line) {
     char symbol;
     if (line[5] == 'E') {
         if (line[6] == 'P' && line[7] == 'S') {
-            // cout << "found EPS" << endl;
             symbol = '-';
         } 
     } else {
         symbol = line[5];
     }
 
-    // cout << "symbol: " << symbol << endl;
-
     int end_state = line[line.length() - 2] - '0';
-    
-    // cout << init_state << ", " << symbol << ", " << end_state << endl;
 
     auto iter = transitions.find(init_state);
     if (iter != end(transitions)) { //contains this state
-        // iter->second.push_back({symbol, end_state});
         auto iter2 = (iter->second).find(symbol);
         if (iter2 != end(iter->second)) {
             iter2->second.push_back(end_state);
@@ -96,9 +98,6 @@ inline void NFA::parse_transition(const string line) {
             iter->second.insert({symbol, states});
         }
     } else {
-        // vector<pair<char, int>> symbol_to_end;
-        // symbol_to_end.push_back({symbol, end_state});
-        // transitions.insert({init_state, symbol_to_end});
         vector<int> states; states.push_back(end_state);
         unordered_map<char, vector<int>> symbol_map;
         symbol_map.insert({symbol, states});
@@ -106,7 +105,8 @@ inline void NFA::parse_transition(const string line) {
     }
 }
 
-const void NFA::print_out() {
+//print out nfa for testing
+void NFA::print_out() const {
     for(auto i : states) {
         cout << i << " ";
     } cout << endl;
@@ -132,29 +132,48 @@ const void NFA::print_out() {
     }
 }
 
+//dfa class (5-tuple) ---------------------------------------
 class DFA {
+    //all dfa_states are essentially sets. this helps avoid duplicates, 
+    //and now we can find single states in constant time
+    //comparing sets can also be down using the == operator
     typedef unordered_set<int> dfa_state;
 
     private:
+        //the 5-tuple, including the nfa_start_state so we can call on it later
         vector<dfa_state> states;
         vector<char> alphabet;
         int nfa_start_state;
         dfa_state start_state;
         vector<dfa_state> accept_states;
         vector<pair<dfa_state, unordered_map<char, dfa_state>>> transitions;
-        vector<dfa_state> powerset;
 
-        void epsilon_check(int state, dfa_state& states, const NFA &nfa, int init);
+        //recursively epsilon a certain state
+        void epsilon_check(int state, dfa_state& states, 
+                           const NFA &nfa, int init);
+        //acquire dfa start state (epsilon check nfa start state)
         void get_start_state(const NFA &nfa);
+        //starts recursive transition generator
         void generate_transitions_dynamic(const NFA &nfa);
-        void generate_transitions (dfa_state process_state, vector<dfa_state> explored_states,
+        //recursive helper function
+        void generate_transitions (dfa_state process_state, 
+                                   vector<dfa_state>& explored_states,
                                    const NFA &nfa);
+        
+        //functions returning strings for printing
+        string string_states() const;
+        inline string string_alphabet() const;
+        inline string string_start_states() const;
+        string string_accept_states() const;
+        vector<string> string_transitions_vec() const;
 
     public:
         DFA(const NFA &nfa);
-        const void print_to_file(string file_name);
+        void print_to_file(string file_name) const;
 };
 
+//create the dfa -- based around the 5-tuple. the states are created along
+//with transitions
 DFA::DFA(const NFA &nfa) {
     get_start_state(nfa);
     alphabet = nfa.alphabet; 
@@ -162,27 +181,32 @@ DFA::DFA(const NFA &nfa) {
     generate_transitions_dynamic(nfa);
 }
 
+//the start the state is the nfa start state, with epsilon checking
 void DFA::get_start_state(const NFA &nfa) {
     start_state.insert(nfa.start_state);
     epsilon_check(nfa.start_state, start_state, nfa, 1);
 }
 
+//starter function for generating transitions recursively
 void DFA::generate_transitions_dynamic (const NFA &nfa) {
     vector<dfa_state> explored_states;
     generate_transitions(start_state, explored_states, nfa);
 }
 
-void DFA::generate_transitions (dfa_state process_state, vector<dfa_state> explored_states, 
+//generate transitions for a dfa state, and then process the created end states
+//(recursive)
+void DFA::generate_transitions (dfa_state process_state, vector<dfa_state>& explored_states, 
                                 const NFA &nfa) {
+    //base case. make sure we haven't already processed this state
     for (auto state : explored_states) {
         if (state == process_state) {
             return;
         } 
     }
 
-    vector<int> dfa_state_vector(process_state.begin(), process_state.end());
     unordered_map<char, dfa_state> process_state_mappings;
-    unordered_set<int> states_checked;
+    unordered_set<int> states_checked; //technically the same data type as
+                                       //dfa state but not literally a dfa state 
 
     //equip map with all possible mappings for each character
     for (char alpha : alphabet) {
@@ -190,17 +214,9 @@ void DFA::generate_transitions (dfa_state process_state, vector<dfa_state> explo
         process_state_mappings.insert({alpha, state});
     }
 
-    //check for epsilon states on each of the states in vector, add
-    //epsilon states back on
-    for (int i = 0; i < dfa_state_vector.size(); i ++) {
-        auto nfa_iter = nfa.transitions.find(dfa_state_vector[i]);
-        auto char_iter = nfa_iter->second.find('-');
-        if (char_iter != nfa_iter->second.end()) {
-            for(auto state : char_iter->second) {
-                dfa_state_vector.push_back(state);
-            }
-        }
-    }
+    //move everything into a vector. this way we can operate on the vector
+    //while changing it. 
+    vector<int> dfa_state_vector(process_state.begin(), process_state.end());
 
     //go through the character mappings for each state
     //add all their corresponding states to map, espilon check them
@@ -220,41 +236,72 @@ void DFA::generate_transitions (dfa_state process_state, vector<dfa_state> explo
                 }
             }
         }
-
+        //since we aren't using a set for dfa_states in this case, 
+        //we need to be careful of duplicates
         states_checked.insert(dfa_state_vector[i]);
     } 
 
+    //copy everything back into a set to get rid of duplicates
     dfa_state set(dfa_state_vector.begin(), dfa_state_vector.end());
-    transitions.push_back({set, process_state_mappings});
-    explored_states.push_back(set);
-    states.push_back(set);
 
+    transitions.push_back({set, process_state_mappings}); //push our transition
+    explored_states.push_back(set); //push the states that we've checked
+    states.push_back(set); //push the states to the overall dfa state list
+
+    //this checks if the set contains the original start state
+    //meeting this condition would mean that the state is an accept state
     if (set.find(nfa_start_state) != set.end()) accept_states.push_back(set);
 
+    //for each of the states at the end of our mappings, 
+    //generate transitions for them
     for (auto mapping : process_state_mappings) {
         generate_transitions(mapping.second, explored_states, nfa);
     }
 }
 
+//recursively epsilon check a single state
 void DFA::epsilon_check(int state, dfa_state& states, const NFA &nfa, int init) {
+    //base case. if the state has already been processed/added to states
     if (states.find(state) != states.end() && init == 0) return;
 
+    //find the state in the nfa, and locate epsilon transitions
     auto transition_iter = nfa.transitions.find(state);
     auto epsilon_associations = transition_iter->second.find('-');
 
+    //another base case. if this state doesn't have epislon transitions, return
     if (epsilon_associations == end(transition_iter->second)) return;
 
+    //there are epsilon transitions to certain states. add them to the state list,
+    //and epsilon check them
     for(auto i : epsilon_associations->second) {
         states.insert(i);
         epsilon_check(i, states, nfa, 0);
     }
 }
 
-const void DFA::print_to_file(string file_name) {
+//a function for printing a dfa to a file
+void DFA::print_to_file(string file_name) const {
     ofstream outfile;
     outfile.open (file_name + ".dfa");
 
     //list of states
+    outfile << string_states() << endl;
+    //list of symbols
+    outfile << string_alphabet() << endl;
+    //start states
+    outfile << string_start_states() << endl;
+    //valid accept states
+    outfile << string_accept_states() << endl;
+    //transition function
+    for (auto transition_str : string_transitions_vec()) {
+        outfile << transition_str << " " << endl;
+    }
+
+    outfile.close();
+}
+
+//helper function to stringify all states
+string DFA::string_states() const {
     string state_list = "";
     for (auto state : states) {
         if (state.size() > 0) {
@@ -269,15 +316,23 @@ const void DFA::print_to_file(string file_name) {
             state_list += "{EM} ";
         }
     }
-    outfile << state_list << endl;
-    
 
-    //list of symbols
+    return state_list;
+}
+
+//helper function to stringify alphabet
+inline string DFA::string_alphabet() const {
+    string alphabet_string = "";
     for (auto symbol : alphabet) {
-        outfile << symbol << '\t';
-    } outfile << endl;
+        alphabet_string += symbol;
+        alphabet_string += '\t';
+    } 
 
-    //start state
+    return alphabet_string;
+}
+
+//helper function to stringify start states
+inline string DFA::string_start_states() const {
     string start_state_string = "{";
     for (auto states : start_state) {
         start_state_string += '0' + states;
@@ -285,10 +340,11 @@ const void DFA::print_to_file(string file_name) {
     }
 
     start_state_string[start_state_string.size() - 1] = '}';
+    return start_state_string;
+}
 
-    outfile << start_state_string << endl;
-
-    //valid accept states
+//helper function to stringify accept states
+inline string DFA::string_accept_states() const {
     string accept_state_list = "";
     for (auto states : accept_states) {
         if (states.size() > 0) {
@@ -302,9 +358,13 @@ const void DFA::print_to_file(string file_name) {
             accept_state_list += power_rep + " ";
         }
     }
-    outfile << accept_state_list << endl;
 
-    // transition function
+    return accept_state_list;
+}
+
+//helper function to create a vector of strings representing transitions
+vector<string> DFA::string_transitions_vec() const {
+    vector<string> str_trans;
     for (auto transition : transitions) {
         string transition_rep = "{";
         if (transition.first.size() > 0) {
@@ -333,26 +393,28 @@ const void DFA::print_to_file(string file_name) {
                 final_rep += "EM";
                 final_rep += '}';
             }
-            outfile << final_rep << " ";
-            outfile << endl;
+            str_trans.push_back(final_rep);
         }
     }
 
-    outfile.close();
+    return str_trans;
 }
 
-int main (int argc, char **argv) {
+//main ------------------------------------------------------
+int main (int argc, char** argv) {
 
+    //look for a file from which to create nfa
     if (argc != 2) {
         cerr << "requires file name!" << endl;
         exit(EXIT_FAILURE);
     }
 
-    // set_test();
+    NFA my_NFA = NFA(argv[1]); //create nfa from file
+    DFA my_DFA = DFA(my_NFA); //create dfa from nfa
 
-    NFA my_NFA = NFA(argv[1]);
-    DFA my_DFA = DFA(my_NFA);
-    my_DFA.print_to_file("first_dfa");
+    //there wasn't a specification for naming the file the dfa prints to,
+    //so using the name converted dfa. 
+    my_DFA.print_to_file("converted_dfa"); //create a file
 
     return 0;
 }
